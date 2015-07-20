@@ -1,0 +1,639 @@
+<html>
+
+<head>
+
+<script>
+
+
+	var keypresses = {
+	
+		offset_amount:0,
+		moving_left:false,
+		moving_right:false,
+	
+		initialize:function(){
+			this._bind_keys()
+			this._bind_keys()
+		},
+		
+		update:function(){
+			if(hamster.is_going_up() || hamster.is_going_down()){
+				game.offset_x += this.offset_amount
+			}
+		},
+		
+		_reset_keys:function(){
+			this.moving_left = false
+			this.moving_right = false
+		},
+		
+		_bind_keys:function(){
+			var self = this
+			window.onkeydown = function(e){
+				console.log(e.keyCode)
+				if(hamster.is_going_up() || hamster.is_going_down()){
+					// left
+					if(e.keyCode === 65){
+						self.offset_amount = 10
+						self.moving_left = true
+					}
+					// right
+					else if(e.keyCode === 68){
+						self.offset_amount = -10
+						self.moving_right = true
+					}
+				}
+			}
+			
+			window.onkeyup = function(e){
+				if(hamster.is_going_up() || hamster.is_going_down()){
+					if(e.keyCode === 65 || e.keyCode === 68){
+						self.offset_amount = 0
+						self.moving_left = false
+						self.moving_right = false
+					}
+				}
+			}
+		}
+		
+	}
+
+	
+
+
+	var cannon_button = {
+		x:0,
+		y:0,
+		radius: 40,
+
+		initialize:function(){
+			this.x = game.width-this.radius-10
+			this.y = game.height-this.radius-10
+		},
+
+		draw:function(){
+			game.ctx.beginPath();
+			game.ctx.arc(this.x, this.y, this.radius, 0, 2 * Math.PI, false);
+			game.ctx.fillStyle = 'green';
+			game.ctx.fill();
+			game.ctx.lineWidth = 5;
+			game.ctx.strokeStyle = '#003300';
+			game.ctx.stroke();
+
+			game.ctx.fillStyle = "#FFFFFF"
+			game.ctx.font = "14px bold Arial";
+			game.ctx.fillText(" PUMP ", game.width-73, game.height-45)
+		}
+	}
+
+	var landing_target = {
+		closest_radius:50,
+		middle_radius:140,
+		furthest_radius:10000,
+		closest_color:'#27E349',
+		middle_color:'#EDEA39',
+		furthest_color:'#ED3939',
+		y:0,
+		width:0,
+		height:0,
+		multiplier:1,
+		middle:0,
+
+		initialize:function(){
+			this.height = 10
+			this.width = 10000
+			this.y = game.height-this.height
+			this._update_middle()
+		},
+
+		draw:function(){
+			this._draw_target()
+		},
+
+		update:function(){
+			this._update_middle()
+		},
+
+		set_multiplier:function(){
+			var m = 1.2
+
+			if(Math.abs(game.offset_x) > this.closest_radius){
+				m = 1.1
+			}
+			
+			if(Math.abs(game.offset_x) > this.closest_radius + this.middle_radius){
+				m = 1
+			}
+			
+			this.multiplier = m
+		},
+
+		get_multiplier:function(){
+			return this.multiplier
+		},
+
+		_update_middle:function(){
+			this.middle = game.offset_x + game.width/2
+		},
+
+		_draw_target:function(){
+			var x = this.middle
+			var neg_x = x - this.closest_radius
+			var y = this.y + game.offset_y
+
+			game.ctx.fillStyle = this.closest_color
+			game.ctx.fillRect(x, y, this.closest_radius, this.height)
+			game.ctx.fillRect(neg_x, y, this.closest_radius, this.height)
+
+			x += this.closest_radius
+			neg_x -= this.middle_radius
+
+			game.ctx.fillStyle = this.middle_color
+			game.ctx.fillRect(x, y, this.middle_radius, this.height)
+			game.ctx.fillRect(neg_x, y, this.middle_radius, this.height)
+
+			x += this.middle_radius
+			neg_x -= this.furthest_radius
+
+			game.ctx.fillStyle = this.furthest_color
+			game.ctx.fillRect(x, y, this.furthest_radius, this.height)
+			game.ctx.fillRect(neg_x, y, this.furthest_radius, this.height)
+		}
+	}
+	
+	var offset = {
+		
+		draw:function(){
+			game.ctx.font="20px Arial";
+			game.ctx.fillStyle = "rgb("+game.text_colors.r+","+game.text_colors.g+","+game.text_colors.b+")"
+			game.ctx.fillText("Off Center By: "+Math.round(game.offset_x),game.width-200,60);
+		}
+	}
+	
+	var wind = {
+		speed:0,
+		
+		initialize:function(){
+			this.set_random_speed()
+		},
+		
+		set_random_speed:function(){
+			var num = Math.random() * (1 - -1) + -1;
+			this.speed = Math.round(num*1000)/1000
+		},
+
+		draw:function(){
+			game.ctx.font="20px Arial";
+			game.ctx.fillStyle = "rgb("+game.text_colors.r+","+game.text_colors.g+","+game.text_colors.b+")"
+
+			var wind_text = ""
+			if(this.speed == 0){
+			 	wind_text = "Wind - No Wind"
+				game.ctx.fillText(wind_text,game.width-160,30);
+			}
+			else{
+				wind_text = "Wind - "+((this.speed > 0)?"East":"West")+" at "+Math.abs(this.speed)+" MPH"
+				game.ctx.fillText(wind_text,game.width-250,30);
+			}
+			
+		}
+	}
+
+	var game = {	
+		width: 600,
+		height: 600,
+		canvas:null,
+		ctx:null,
+		timer:null,
+		offset_x:0,
+		offset_y:0,
+		state:"initial_container",
+		final_score:0,
+		text_colors:{r:0,g:0,b:0},
+		
+		times_button_has_been_clicked: 0,
+
+		setup:function(){
+			image_loader.load(this.loaded);
+			this.canvas = document.getElementById('game_canvas');
+			this.canvas.width = this.width;
+			this.canvas.height = this.height;
+			this.ctx = this.canvas.getContext('2d');
+			background.initialize();
+			cannon_button.initialize();
+			hamster.initialize()
+			landing_target.initialize()
+			this.when_canvas_is_clicked();
+			wind.initialize()
+			keypresses.initialize()
+		},
+		
+		loaded:function(){
+			this.timer = setInterval(function(){game.run()}, 16 );	
+		},
+		
+		run:function(){
+			this.update();
+			this.draw();
+		},
+
+		update:function(){
+			if(this.state == "game"){
+				this._update_text_colors()
+				hamster.update()
+				landing_target.update()
+				keypresses.update()
+
+				if(hamster.is_going_up() && hamster.speed <= 0){
+					hamster.set_is_going_down()
+				}
+
+				if(hamster.is_going_up() || hamster.is_going_down() || hamster.is_parachuting()){
+					this.offset_y = this.offset_y + hamster.speed
+					this.offset_x = this.offset_x + wind.speed
+				}
+
+				if(hamster.is_going_down() && this.offset_y <= 6000){
+					hamster.set_is_parachuting()
+					keypresses._reset_keys()
+				}
+
+				if(hamster.get_max_height() < this.offset_y){
+					hamster.max_height = this.offset_y
+				}
+			}
+		},
+
+		draw:function(){
+			if(this.state == "game"){
+				this.ctx.clearRect (0, 0, this.canvas.width, this.canvas.height);
+				background.draw();
+				cannon_button.draw();
+				hamster.draw();
+				cannon.draw();
+				this._draw_hamster_height();
+				countdown.draw()
+				landing_target.draw();
+				wind.draw()
+				offset.draw()
+			}
+			else{
+				initial_container.draw()
+			}
+		},
+		
+		_draw_hamster_height:function(){
+			this.ctx.font="30px Arial";
+			this.ctx.fillStyle = "rgb("+this.text_colors.r+","+this.text_colors.g+","+this.text_colors.b+")"
+
+			if(hamster.get_air_height() >= 0){
+				this.ctx.fillText("Height: "+this.offset_y,10,40);
+			}
+			else{
+				this.ctx.fillText("Height: 0",10,40);
+			}
+			
+			if(hamster.has_landed()){
+				this.ctx.fillText("Score",100,200);
+				this.ctx.font="20px Arial";
+				this.ctx.fillText("Max Height: "+hamster.max_height, 140, 240)
+				this.ctx.fillText("Multiplier: "+landing_target.multiplier, 140, 265)
+				this.ctx.fillText("Final Score: "+Math.round(hamster.max_height * landing_target.multiplier), 140, 290)
+				this.final_score = hamster.max_height * landing_target.multiplier
+			}	
+		},
+
+		_update_text_colors:function(){
+			this.text_colors.r = 255 - parseInt(background.sky_color.r)
+			this.text_colors.g = 255 - parseInt(background.sky_color.g)
+			this.text_colors.b = 255 - parseInt(background.sky_color.b)
+		},
+		
+		when_canvas_is_clicked:function(){
+			
+			this.canvas.onclick = function(e){
+				if(game.state == "game"){
+					
+					var x;
+					var y;
+					if (e.pageX || e.pageY) { 
+					  x = e.pageX;
+					  y = e.pageY;
+					}
+					else { 
+					  x = e.clientX + document.body.scrollLeft + document.documentElement.scrollLeft; 
+					  y = e.clientY + document.body.scrollTop + document.documentElement.scrollTop; 
+					} 
+					x -= game.canvas.offsetLeft;
+					y -= game.canvas.offsetTop;
+
+
+					var dist_to_button = Math.sqrt(Math.pow(cannon_button.x - x, 2) + Math.pow(cannon_button.y - y, 2))
+
+					if(dist_to_button <= cannon_button.radius && hamster.is_in_cannon()){
+						game.times_button_has_been_clicked++;
+					}
+					
+				}
+				else{
+					game.state = "game";
+					countdown.start();
+				}
+			}
+		}
+
+	}
+	
+	var image_loader = {
+		done_loading:function(){},
+		loaded_count:0,
+		loaded_images:{},
+		images_to_load:[
+			"cannon",
+			"hamtaro",
+			"bg",
+			"parachute",
+			"arrow"
+		],
+		
+		get_image:function(name){
+			return this.loaded_images[name];
+		},
+		
+		load:function(callback){
+			this.done_loading = callback;
+		
+			for(var i in this.images_to_load){
+				this.loaded_images[this.images_to_load[i]] = new Image();
+				this.loaded_images[this.images_to_load[i]].onLoad = this.when_loaded();
+				this.loaded_images[this.images_to_load[i]].src = this.images_to_load[i]+'.png';
+				
+			}
+		},
+		
+		when_loaded:function(){
+			this.loaded_count++;
+			if(this.loaded_count == this.images_to_load.length){
+				this.done_loading();
+			}
+		}
+	}
+	
+
+	
+	var hamster = {
+		state:"in_cannon",
+		width: 50,
+		height: 57,
+		parachute_height:158,
+		parachute_width:198,
+		speed:0,
+		x:0,
+		y:0,
+		max_height:0,
+
+		initialize:function(){
+			this.x = (game.width/2) - (this.width/2)
+			this.y = game.height-cannon.cannon_height-this.height+18
+		},
+
+		update:function(){
+			if(this.is_going_up() || this.is_going_down()){
+				this.speed--
+			}
+			
+			if(this.has_landed() === false && game.offset_y + this.speed < -(game.height-hamster.y-hamster.height-landing_target.height)){
+				if(this.has_landed() == false){
+					game.offset_y += -(game.offset_y + game.height-hamster.y-hamster.height-landing_target.height)
+				}
+				
+				landing_target.set_multiplier()
+				this.set_has_landed()
+				high_score.set_high_score()
+			}
+
+		},
+
+		draw:function(){
+
+			if(this.is_parachuting()){
+				this._draw_parachute()
+			}
+
+			this._draw_hamster()			
+		},
+
+		_draw_hamster:function(){
+			var image = image_loader.get_image("hamtaro")
+			game.ctx.save()
+			game.ctx.translate(this.x, this.y)
+			game.ctx.translate(image.width/2, image.height/2)
+			if(keypresses.moving_left){
+				game.ctx.rotate(-Math.PI/9)
+			}
+			else if(keypresses.moving_right){
+				game.ctx.rotate(Math.PI/9)
+			}
+			game.ctx.translate(-image.width/2, -image.height/2)
+			game.ctx.drawImage(image, 0, 0, this.width, this.height);
+			game.ctx.restore()
+		},
+
+		_draw_parachute:function(){
+			game.ctx.drawImage(image_loader.get_image("parachute"), (game.width/2) - (this.parachute_width/2), game.height-cannon.cannon_height-this.height+30-this.parachute_height, this.parachute_width, this.parachute_height)
+		},
+		
+		get_air_height:function(){
+			return game.offset_y
+		},
+
+		get_max_height:function(){
+			return this.max_height
+		},
+
+		is_in_cannon:function(){
+			return (this.state === "in_cannon")?true:false;
+		},
+
+		is_going_up:function(){
+			return (this.state === "going_up")?true:false;
+		},
+
+		is_going_down:function(){
+			return (this.state === "going_down")?true:false;
+		},
+
+		is_parachuting:function(){
+			return (this.state === "parachuting")?true:false;
+		},
+		
+		has_landed:function(){
+			return (this.state === "landed")?true:false;
+		},
+
+		set_is_going_up:function(){
+			this.state = "going_up";
+		},
+
+		set_is_parachuting:function(){
+			this.state = "parachuting"
+			this.speed = -20
+		},
+
+		set_is_going_down:function(){
+			this.state = "going_down"
+			this.speed = 0
+		},
+
+		set_has_landed:function(){
+			this.state = "landed"
+			this.speed = 0
+		},
+
+		set_initial_speed:function(){
+			this.speed = game.times_button_has_been_clicked * 10
+		}
+	}	
+	
+	var cannon = {
+		force:0,
+		cannon_height:150,
+		cannon_width:50,
+		
+		draw:function(){
+			if(hamster.is_in_cannon() || hamster.is_going_up()){
+				game.ctx.drawImage(image_loader.get_image("cannon"), (game.width/2)-(this.cannon_width/2) + game.offset_x, game.offset_y+game.height-this.cannon_height, this.cannon_width, this.cannon_height);
+			}
+		}
+	}
+	
+	var background = {
+		counter:0,
+		last_hamster_height:0,
+		sky_color:{
+			r:209,g:241,b:255
+		},
+		
+		initialize:function(){},
+		
+		draw:function(){
+			
+			game.ctx.fillStyle = "rgb("+parseInt(this.sky_color.r)+","+parseInt(this.sky_color.g)+","+parseInt(this.sky_color.b)+")"
+			game.ctx.fillRect(0, 0, game.canvas.width, game.canvas.height);
+			
+			var bg_image = image_loader.get_image("bg")
+			game.ctx.drawImage(bg_image, 0, parseInt(hamster.get_air_height()/10) + game.height - bg_image.height, bg_image.width, bg_image.height);
+			
+			if(hamster.is_going_up() && hamster.get_air_height() > 100000 && hamster.get_air_height() - this.last_hamster_height > 235){
+				this.last_hamster_height = hamster.get_air_height()
+				this.sky_color.r = this.sky_color.r - 0.5
+				this.sky_color.g = this.sky_color.g - 0.5
+				this.sky_color.b = this.sky_color.b - 0.5
+			}
+			else if(hamster.is_going_down() && this.sky_color.r <= 209 && hamster.get_air_height() > 100000 && hamster.get_air_height() - this.last_hamster_height > -235){
+				this.last_hamster_height = hamster.get_air_height()
+				this.sky_color.r = this.sky_color.r + 0.5
+				this.sky_color.g = this.sky_color.g + 0.5
+				this.sky_color.b = this.sky_color.b + 0.5
+			}
+			
+			
+			this.counter++
+		}
+	}
+	
+	var countdown = {
+		timer:null,
+		cannon_pump_time:10,
+		
+		start:function(){
+			if(this.timer === null){
+				this.timer = setInterval(function(){countdown.update()}, 1000);	
+			}
+		},
+		
+		update:function(){
+			if(this.cannon_pump_time > 0){
+				this.cannon_pump_time = this.cannon_pump_time - 1
+			}
+			
+			if(this.cannon_pump_time <= 0 && hamster.is_in_cannon()){
+				hamster.set_is_going_up()
+				hamster.set_initial_speed()
+			}
+		},
+		
+		draw:function(){
+			if(this.cannon_pump_time > 0){
+				game.ctx.font = "40px Arial";
+				game.ctx.fillStyle = "#000"
+				game.ctx.fillText(this.cannon_pump_time, (game.width/2)-15, 200);
+			}
+		}
+	}
+	
+	var initial_container = {
+		offset_x:20,
+		offset_y:40,
+		font_size:18,
+		line_spacing:5,
+		text:[
+			"In the near future, hamsters have discovered the power of flight.",
+			"Your mission is to assist the flight program with testing.",
+			"",
+			"To help them with their mission, you will be powering the airpump for",
+			"the cannon (yes it's air powered - the program is still in it's infancy).",
+			"",
+			"Once fired, you will have to help the hamster land.  You can do this by ",
+			"pressing the a and d keys to make him move left and right.  Since the ",
+			"hamsters have not perfected flight, they have forgotten to add parachute",
+			"turning cords.",
+			"",
+			"INSTRUCTIONS",
+			"You will click a button in the bottom-right hand corner which pumps air",
+			"into the cannon. The only problem is that you will only have "+countdown.cannon_pump_time,
+			"seconds to pump air into the cannon due to the limited technology.",
+			"",
+			"Once the hamster is in the air you will need to position it so that when",
+			"the hamster deploys his chute, he will fall gently into the green landing area.",
+			"",
+			"Whenever you are ready, CLICK THE SCREEN TO BEGIN."
+			
+		],
+		draw:function(){
+			game.ctx.fillStyle = "#000000"
+			game.ctx.fillRect(0, 0, game.canvas.width, game.canvas.height);
+			
+			game.ctx.font = this.font_size + "px Arial";
+			game.ctx.fillStyle = "#FFFFFF"
+			
+			var counter = this.offset_y
+			for(var i in this.text){
+				game.ctx.fillText(this.text[i], this.offset_x, counter);
+				counter += this.font_size + this.line_spacing
+			}
+			
+			
+		}
+		
+	}
+	
+	
+
+	window.onload = function(){
+		game.setup();
+	}
+
+</script>
+
+
+<style>#canvas_container{margin: 40px auto 40px auto; width: 600px; height: 600px; border: 1px solid #333;}</style>
+</head>
+
+<body>
+	<div id="canvas_container">
+		<canvas id="game_canvas"></canvas>
+	</div>
+</body>
+
+</html>
